@@ -1,195 +1,134 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>YouTube + Timer App</title>
-
-<!-- PWA -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#ffffff">
-
-<style>
-  body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
-  .timer-box { margin-top: 20px; }
-  input { padding: 5px; }
-  button { padding: 8px 15px; margin-left: 5px; }
-  #time-display { font-size: 2em; margin-top: 10px; }
-  .yt-item { margin: 5px 0; }
-  .yt-item button { margin-left: 10px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube + Timer App</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+        }
+        #video-list button {
+            display: block;
+            margin: 5px auto;
+            padding: 10px;
+            width: 80%;
+        }
+        #timer-section {
+            margin-top: 20px;
+        }
+        #timer-display {
+            font-size: 2em;
+            margin: 10px 0;
+        }
+    </style>
 </head>
 <body>
 
-<h2>YouTube + タイマー</h2>
+    <h2>YouTube Player</h2>
+    <iframe id="player" width="100%" height="200"
+        src="https://www.youtube.com/embed/"
+        frameborder="0" allowfullscreen>
+    </iframe>
 
-<!-- YouTube 埋め込み -->
-<div>
-  <iframe id="ytplayer" width="560" height="315"
-    src=""
-    frameborder="0" allowfullscreen>
-  </iframe>
-</div>
+    <h3>登録した動画</h3>
+    <div id="video-list"></div>
 
-<hr>
+    <h3>動画を追加</h3>
+    <input type="text" id="video-url" placeholder="YouTube URL を入力">
+    <button onclick="addVideo()">追加</button>
 
-<!-- YouTube リンク管理 -->
-<h3>YouTube リンク管理（最大10件）</h3>
+    <div id="timer-section">
+        <h3>タイマー</h3>
+        <input type="number" id="minutes" placeholder="分" min="1">
+        <button onclick="startTimer()">開始</button>
+        <button onclick="stopTimer()">停止</button>
+        <div id="timer-display">00:00</div>
+    </div>
 
-<input type="text" id="yt-url" placeholder="YouTube URL を入力" size="40">
-<button onclick="addYoutube()">追加</button>
+    <!-- ★ 追加：タイマーの下に画像を表示 -->
+    <div style="margin-top: 20px;">
+        <img src="260401_yantora.jpg" alt="yantora" style="width:200px;">
+    </div>
 
-<div id="yt-list"></div>
+    <script>
+        let timerInterval;
 
-<hr>
+        function addVideo() {
+            const url = document.getElementById("video-url").value;
+            const videoId = extractVideoId(url);
+            if (!videoId) {
+                alert("正しい YouTube URL を入力してください");
+                return;
+            }
 
-<!-- タイマー -->
-<div class="timer-box">
-  <label>タイマー（分）:</label>
-  <input type="number" id="minutes" min="1" max="60" value="30">
-  <button onclick="startTimer()">開始</button>
-  <button onclick="stopTimer()">停止</button>
+            const list = document.getElementById("video-list");
+            const btn = document.createElement("button");
+            btn.textContent = url;
+            btn.onclick = () => loadVideo(videoId);
+            list.appendChild(btn);
 
-  <div id="time-display">00:00</div>
-</div>
+            saveVideo(url);
+            document.getElementById("video-url").value = "";
+        }
 
-<!-- 梵鐘アラーム音（ローカルファイル） -->
-<audio id="alarm-sound">
-  <source src="otera_kane.mp3" type="audio/mp3">
-</audio>
+        function extractVideoId(url) {
+            const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+            return match ? match[1] : null;
+        }
 
-<!-- YouTube IFrame API -->
-<script src="https://www.youtube.com/iframe_api"></script>
+        function loadVideo(videoId) {
+            document.getElementById("player").src =
+                "https://www.youtube.com/embed/" + videoId;
+        }
 
-<script>
-/* ------------------------------
-   YouTube API プレイヤー
------------------------------- */
-let player;
+        function saveVideo(url) {
+            const videos = JSON.parse(localStorage.getItem("videos") || "[]");
+            videos.push(url);
+            localStorage.setItem("videos", JSON.stringify(videos));
+        }
 
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player('ytplayer');
-}
+        function loadSavedVideos() {
+            const videos = JSON.parse(localStorage.getItem("videos") || "[]");
+            const list = document.getElementById("video-list");
 
-/* ------------------------------
-   YouTube リンク管理
------------------------------- */
-let ytLinks = JSON.parse(localStorage.getItem("ytLinks") || "[]");
+            videos.forEach(url => {
+                const videoId = extractVideoId(url);
+                const btn = document.createElement("button");
+                btn.textContent = url;
+                btn.onclick = () => loadVideo(videoId);
+                list.appendChild(btn);
+            });
+        }
 
-function saveLinks() {
-  localStorage.setItem("ytLinks", JSON.stringify(ytLinks));
-}
+        function startTimer() {
+            const minutes = parseInt(document.getElementById("minutes").value);
+            if (!minutes || minutes <= 0) return;
 
-function renderList() {
-  const list = document.getElementById("yt-list");
-  list.innerHTML = "";
+            let remaining = minutes * 60;
 
-  ytLinks.forEach((url, index) => {
-    const div = document.createElement("div");
-    div.className = "yt-item";
-    div.innerHTML = `
-      <button onclick="loadVideo('${url}')">再生</button>
-      ${url}
-      <button onclick="deleteLink(${index})">削除</button>
-    `;
-    list.appendChild(div);
-  });
-}
+            timerInterval = setInterval(() => {
+                remaining--;
+                const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+                const s = String(remaining % 60).padStart(2, "0");
+                document.getElementById("timer-display").textContent = `${m}:${s}`;
 
-function addYoutube() {
-  const url = document.getElementById("yt-url").value.trim();
-  if (!url) return;
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    alert("時間になりました");
+                }
+            }, 1000);
+        }
 
-  if (ytLinks.length >= 10) {
-    alert("登録できるのは最大10件です");
-    return;
-  }
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
 
-  const embed = convertToEmbed(url);
-  if (!embed) {
-    alert("YouTube の URL を入力してください");
-    return;
-  }
-
-  ytLinks.push(embed);
-  saveLinks();
-  renderList();
-  document.getElementById("yt-url").value = "";
-}
-
-function deleteLink(index) {
-  ytLinks.splice(index, 1);
-  saveLinks();
-  renderList();
-}
-
-function loadVideo(url) {
-  // ★ 再生ボタンでは「選択」だけ行う（再生しない）
-  document.getElementById("ytplayer").src = url + "?enablejsapi=1";
-}
-
-function convertToEmbed(url) {
-  const match = url.match(/v=([a-zA-Z0-9_-]+)/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
-
-  const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
-  if (short) return `https://www.youtube.com/embed/${short[1]}`;
-
-  return null;
-}
-
-renderList();
-
-/* ------------------------------
-   タイマー
------------------------------- */
-let timerInterval;
-let remainingSeconds = 0;
-
-function startTimer() {
-  const min = parseInt(document.getElementById("minutes").value);
-  if (isNaN(min) || min < 1 || min > 60) return;
-
-  // ★ タイマー開始と同時に YouTube 再生（ミュートで確実に再生される）
-  if (player) {
-    player.mute();
-    player.playVideo();
-  }
-
-  remainingSeconds = min * 60;
-  updateDisplay();
-
-  clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    remainingSeconds--;
-    updateDisplay();
-
-    if (remainingSeconds <= 0) {
-      clearInterval(timerInterval);
-      document.getElementById("alarm-sound").play();
-
-      // ★ 必要なら YouTube 停止
-       if (player) player.pauseVideo();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  clearInterval(timerInterval);
-}
-
-function updateDisplay() {
-  const m = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
-  const s = String(remainingSeconds % 60).padStart(2, "0");
-  document.getElementById("time-display").textContent = `${m}:${s}`;
-}
-
-/* ------------------------------
-   PWA Service Worker
------------------------------- */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
-</script>
+        loadSavedVideos();
+    </script>
 
 </body>
 </html>
