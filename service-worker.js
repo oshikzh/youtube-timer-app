@@ -4,7 +4,8 @@ self.addEventListener("install", (event) => {
       return cache.addAll([
         "./",
         "./index.html",
-        "./manifest.json"
+        "./manifest.json",
+        "./otera_kane.mp3"   // ← 追加
       ]);
     })
   );

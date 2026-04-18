@@ -11,9 +11,11 @@
 <style>
   body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
   .timer-box { margin-top: 20px; }
-  input { width: 80px; padding: 5px; }
-  button { padding: 8px 15px; margin-left: 10px; }
+  input { padding: 5px; }
+  button { padding: 8px 15px; margin-left: 5px; }
   #time-display { font-size: 2em; margin-top: 10px; }
+  .yt-item { margin: 5px 0; }
+  .yt-item button { margin-left: 10px; }
 </style>
 </head>
 <body>
@@ -23,10 +25,22 @@
 <!-- YouTube 埋め込み -->
 <div>
   <iframe id="ytplayer" width="560" height="315"
-    src="https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1"
+    src=""
     frameborder="0" allowfullscreen>
   </iframe>
 </div>
+
+<hr>
+
+<!-- YouTube リンク管理 -->
+<h3>YouTube リンク管理（最大10件）</h3>
+
+<input type="text" id="yt-url" placeholder="YouTube URL を入力" size="40">
+<button onclick="addYoutube()">追加</button>
+
+<div id="yt-list"></div>
+
+<hr>
 
 <!-- タイマー -->
 <div class="timer-box">
@@ -38,12 +52,86 @@
   <div id="time-display">00:00</div>
 </div>
 
-<!-- アラーム音 -->
+<!-- 梵鐘アラーム音 -->
 <audio id="alarm-sound">
-  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+  <source src="otera_kane.mp3" type="audio/mp3">
 </audio>
 
 <script>
+/* ------------------------------
+   YouTube リンク管理
+------------------------------ */
+let ytLinks = JSON.parse(localStorage.getItem("ytLinks") || "[]");
+
+function saveLinks() {
+  localStorage.setItem("ytLinks", JSON.stringify(ytLinks));
+}
+
+function renderList() {
+  const list = document.getElementById("yt-list");
+  list.innerHTML = "";
+
+  ytLinks.forEach((url, index) => {
+    const div = document.createElement("div");
+    div.className = "yt-item";
+    div.innerHTML = `
+      <button onclick="loadVideo('${url}')">再生</button>
+      ${url}
+      <button onclick="deleteLink(${index})">削除</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function addYoutube() {
+  const url = document.getElementById("yt-url").value.trim();
+  if (!url) return;
+
+  if (ytLinks.length >= 10) {
+    alert("登録できるのは最大10件です");
+    return;
+  }
+
+  // 通常URL → embed URL に変換
+  const embed = convertToEmbed(url);
+  if (!embed) {
+    alert("YouTube の URL を入力してください");
+    return;
+  }
+
+  ytLinks.push(embed);
+  saveLinks();
+  renderList();
+  document.getElementById("yt-url").value = "";
+}
+
+function deleteLink(index) {
+  ytLinks.splice(index, 1);
+  saveLinks();
+  renderList();
+}
+
+function loadVideo(url) {
+  document.getElementById("ytplayer").src = url + "?enablejsapi=1";
+}
+
+function convertToEmbed(url) {
+  // https://www.youtube.com/watch?v=xxxx → embed に変換
+  const match = url.match(/v=([a-zA-Z0-9_-]+)/);
+  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+
+  // https://youtu.be/xxxx → embed に変換
+  const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
+  if (short) return `https://www.youtube.com/embed/${short[1]}`;
+
+  return null;
+}
+
+renderList();
+
+/* ------------------------------
+   タイマー
+------------------------------ */
 let timerInterval;
 let remainingSeconds = 0;
 
@@ -76,7 +164,9 @@ function updateDisplay() {
   document.getElementById("time-display").textContent = `${m}:${s}`;
 }
 
-// PWA Service Worker 登録
+/* ------------------------------
+   PWA Service Worker
+------------------------------ */
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
 }
