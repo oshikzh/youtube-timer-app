@@ -52,12 +52,24 @@
   <div id="time-display">00:00</div>
 </div>
 
-<!-- 梵鐘アラーム音 -->
+<!-- 梵鐘アラーム音（ローカルファイル） -->
 <audio id="alarm-sound">
   <source src="otera_kane.mp3" type="audio/mp3">
 </audio>
 
+<!-- YouTube IFrame API -->
+<script src="https://www.youtube.com/iframe_api"></script>
+
 <script>
+/* ------------------------------
+   YouTube API プレイヤー
+------------------------------ */
+let player;
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('ytplayer');
+}
+
 /* ------------------------------
    YouTube リンク管理
 ------------------------------ */
@@ -92,7 +104,6 @@ function addYoutube() {
     return;
   }
 
-  // 通常URL → embed URL に変換
   const embed = convertToEmbed(url);
   if (!embed) {
     alert("YouTube の URL を入力してください");
@@ -116,11 +127,9 @@ function loadVideo(url) {
 }
 
 function convertToEmbed(url) {
-  // https://www.youtube.com/watch?v=xxxx → embed に変換
   const match = url.match(/v=([a-zA-Z0-9_-]+)/);
   if (match) return `https://www.youtube.com/embed/${match[1]}`;
 
-  // https://youtu.be/xxxx → embed に変換
   const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
   if (short) return `https://www.youtube.com/embed/${short[1]}`;
 
@@ -139,6 +148,11 @@ function startTimer() {
   const min = parseInt(document.getElementById("minutes").value);
   if (isNaN(min) || min < 1 || min > 60) return;
 
+  // ★ YouTube 自動再生
+  if (player) {
+    player.playVideo();
+  }
+
   remainingSeconds = min * 60;
   updateDisplay();
 
@@ -150,6 +164,9 @@ function startTimer() {
     if (remainingSeconds <= 0) {
       clearInterval(timerInterval);
       document.getElementById("alarm-sound").play();
+
+      // ★ タイマー終了時に YouTube を停止したい場合
+      // if (player) player.pauseVideo();
     }
   }, 1000);
 }
@@ -174,3 +191,4 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+s
