@@ -149,8 +149,9 @@ function startTimer() {
   const min = parseInt(document.getElementById("minutes").value);
   if (isNaN(min) || min < 1 || min > 60) return;
 
-  // ★ タイマー開始と同時に YouTube 再生
+  // ★ タイマー開始と同時に YouTube 再生（ミュートで確実に再生される）
   if (player) {
+    player.mute();
     player.playVideo();
   }
 
@@ -166,4 +167,29 @@ function startTimer() {
       clearInterval(timerInterval);
       document.getElementById("alarm-sound").play();
 
-      // ★ 必
+      // ★ 必要なら YouTube 停止
+       if (player) player.pauseVideo();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+}
+
+function updateDisplay() {
+  const m = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+  const s = String(remainingSeconds % 60).padStart(2, "0");
+  document.getElementById("time-display").textContent = `${m}:${s}`;
+}
+
+/* ------------------------------
+   PWA Service Worker
+------------------------------ */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
