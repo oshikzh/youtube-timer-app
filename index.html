@@ -123,6 +123,7 @@ function deleteLink(index) {
 }
 
 function loadVideo(url) {
+  // ★ 再生ボタンでは「選択」だけ行う（再生しない）
   document.getElementById("ytplayer").src = url + "?enablejsapi=1";
 }
 
@@ -148,7 +149,7 @@ function startTimer() {
   const min = parseInt(document.getElementById("minutes").value);
   if (isNaN(min) || min < 1 || min > 60) return;
 
-  // ★ YouTube 自動再生
+  // ★ タイマー開始と同時に YouTube 再生
   if (player) {
     player.playVideo();
   }
@@ -165,30 +166,4 @@ function startTimer() {
       clearInterval(timerInterval);
       document.getElementById("alarm-sound").play();
 
-      // ★ タイマー終了時に YouTube を停止したい場合
-      // if (player) player.pauseVideo();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  clearInterval(timerInterval);
-}
-
-function updateDisplay() {
-  const m = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
-  const s = String(remainingSeconds % 60).padStart(2, "0");
-  document.getElementById("time-display").textContent = `${m}:${s}`;
-}
-
-/* ------------------------------
-   PWA Service Worker
------------------------------- */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
-</script>
-
-</body>
-</html>
-s
+      // ★ 必
