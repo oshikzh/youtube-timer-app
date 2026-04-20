@@ -49,14 +49,19 @@
         <div id="timer-display">00:00</div>
     </div>
 
-    <!-- ★ 追加：タイマーの下に画像を表示 -->
-<!--    <div style="margin-top: 20px;">
-        <img src="260401_yantora.jpg" alt="yantora" style="width:200px;">
-    </div>
--->
+    <!-- 🔔 タイマー終了時に鳴らす音声 -->
+    <audio id="alarm-sound">
+        <source src="otera_kane.mp3" type="audio/mp3">
+    </audio>
 
     <script>
         let timerInterval;
+        let player;
+
+        // ① YouTube IFrame API が準備できたら呼ばれる
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player');
+        }
 
         function addVideo() {
             const url = document.getElementById("video-url").value;
@@ -83,7 +88,7 @@
 
         function loadVideo(videoId) {
             document.getElementById("player").src =
-                "https://www.youtube.com/embed/" + videoId;
+                "https://www.youtube.com/embed/" + videoId + "?enablejsapi=1";
         }
 
         function saveVideo(url) {
@@ -109,6 +114,12 @@
             const minutes = parseInt(document.getElementById("minutes").value);
             if (!minutes || minutes <= 0) return;
 
+            // ② タイマー開始時に YouTube を自動再生
+            if (player) {
+                player.mute();      // 自動再生を確実にする
+                player.playVideo(); // 再生
+            }
+
             let remaining = minutes * 60;
 
             timerInterval = setInterval(() => {
@@ -119,6 +130,10 @@
 
                 if (remaining <= 0) {
                     clearInterval(timerInterval);
+
+                    // 🔔 タイマー終了時に梵鐘を鳴らす
+                    document.getElementById("alarm-sound").play();
+
                     alert("時間になりました");
                 }
             }, 1000);
@@ -130,6 +145,9 @@
 
         loadSavedVideos();
     </script>
+
+    <!-- ③ YouTube IFrame API 読み込み -->
+    <script src="https://www.youtube.com/iframe_api"></script>
 
 </body>
 </html>
