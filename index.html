@@ -16,6 +16,8 @@
   #time-display { font-size: 2em; margin-top: 10px; }
   .yt-item { margin: 8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .yt-item button { margin-left: 0; }
+  .yt-item.selected { background:#fff3e0; border-radius:4px; padding:4px 6px; }
+  .yt-item span { word-break: break-all; }
   #ytplayer { width:100%; max-width:560px; height:315px; background:#000; }
   .small { font-size:0.9em; color:#555; }
 </style>
@@ -38,7 +40,7 @@
 
 <input type="text" id="yt-url" placeholder="YouTube URL を入力" size="50">
 <button id="add-btn">追加</button>
-<div class="small">貼り付けると自動で埋め込み URL に変換します。再生ボタンは「選択」のみ。</div>
+<div class="small">貼り付けると自動で埋め込み URL に変換します。「再生」ボタンで選択した動画がプレイヤーに読み込まれます。</div>
 
 <div id="yt-list"></div>
 
@@ -46,18 +48,13 @@
 
 <!-- タイマー -->
 <div class="timer-box">
-  <label>タイマー（分）:</label>
-  <input type="number" id="minutes" min="1" max="60" value="30">
+  <label>タイマー（分・最大30分）:</label>
+  <input type="number" id="minutes" min="1" max="30" value="30">
   <button id="start-btn">開始</button>
   <button id="stop-btn">停止</button>
 
   <div id="time-display">00:00</div>
 </div>
-
-<!-- 梵鐘アラーム音（ローカルファイル） -->
-<audio id="alarm-sound" preload="auto">
-  <source src="otera_kane.mp3" type="audio/mp3">
-</audio>
 
 <!-- YouTube IFrame API -->
 <script src="https://www.youtube.com/iframe_api"></script>
@@ -67,7 +64,7 @@
    設定と状態
 ------------------------------ */
 const MAX_LINKS = 10;
-const DESIRED_GAIN = 1.2; // 約2割増し
+const BELL_MASTER_GAIN = 1.2; // 鐘の合成音の全体音量
 
 let player; // YT.Player
 let selectedVideoId = null;
@@ -85,39 +82,93 @@ const stopBtn = document.getElementById('stop-btn');
 const ytUrlInput = document.getElementById('yt-url');
 const ytListDiv = document.getElementById('yt-list');
 const timeDisplay = document.getElementById('time-display');
-const alarmElement = document.getElementById('alarm-sound');
+const minutesInput = document.getElementById('minutes');
 
 /* ------------------------------
-   Web Audio API セットアップ（増幅）
+   Web Audio API（梵鐘の合成音）
 ------------------------------ */
 let audioCtx = null;
-let alarmSourceNode = null;
-let alarmGainNode = null;
 
-function setupAlarmAudio() {
-  try {
-    if (audioCtx) return;
+// ユーザー操作（開始ボタンのクリック）のタイミングで AudioContext を用意しておく。
+// ブラウザの自動再生ポリシー対策として、タイマー終了時ではなく開始時に resume しておく。
+function setupAudioContext() {
+  if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // createMediaElementSource は同じ audio element に対して複数回呼ぶと例外になるので一度だけ
-    alarmSourceNode = audioCtx.createMediaElementSource(alarmElement);
-    alarmGainNode = audioCtx.createGain();
-    alarmGainNode.gain.value = DESIRED_GAIN;
-    alarmSourceNode.connect(alarmGainNode);
-    alarmGainNode.connect(audioCtx.destination);
-  } catch (e) {
-    console.warn('Web Audio API を利用できません。HTMLAudio の volume を使ったフォールバックになります。', e);
-    audioCtx = null;
-    alarmSourceNode = null;
-    alarmGainNode = null;
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
   }
 }
 
-function ensureAudioContextResumed() {
-  if (!audioCtx) return Promise.resolve();
-  if (audioCtx.state === 'suspended') {
-    return audioCtx.resume().catch(()=>{});
+// 梵鐘（お寺の鐘）風の音を合成して1回鳴らす。
+// 実際の鐘は基音に対して非整数倍音（インハーモニック）が重なり、長い余韻を持つ。
+// ここでは複数のサイン波を異なる比率・減衰時間で重ね、アタック音にノイズバーストを添えて質感を再現する。
+function playTempleBell() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  return Promise.resolve();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+
+  const now = audioCtx.currentTime;
+  const fundamental = 90; // Hz。低めの基音で「ゴーン」という重さを出す
+
+  // [周波数比, 音量, 減衰にかかる秒数]
+  const partials = [
+    { ratio: 1.00, gain: 1.00, decay: 6.5 },
+    { ratio: 1.50, gain: 0.55, decay: 5.5 },
+    { ratio: 2.00, gain: 0.38, decay: 4.5 },
+    { ratio: 2.76, gain: 0.30, decay: 3.8 },
+    { ratio: 3.40, gain: 0.20, decay: 3.0 },
+    { ratio: 4.20, gain: 0.14, decay: 2.2 },
+    { ratio: 5.40, gain: 0.09, decay: 1.6 },
+    { ratio: 8.93, gain: 0.05, decay: 1.0 },
+  ];
+
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.value = BELL_MASTER_GAIN;
+  masterGain.connect(audioCtx.destination);
+
+  partials.forEach((p) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = fundamental * p.ratio;
+
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(p.gain, now);
+    // exponentialRamp は 0 を指定できないため、ごく小さい値まで減衰させる
+    g.gain.exponentialRampToValueAtTime(0.0005, now + p.decay);
+
+    osc.connect(g);
+    g.connect(masterGain);
+
+    osc.start(now);
+    osc.stop(now + p.decay + 0.2);
+  });
+
+  // 打撃音（アタック）: 短いノイズバーストで「ゴンッ」という質感を追加
+  const noiseDuration = 0.06;
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * noiseDuration, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  }
+  const noiseSource = audioCtx.createBufferSource();
+  noiseSource.buffer = noiseBuffer;
+
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = 'lowpass';
+  noiseFilter.frequency.value = 900;
+
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0.5, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0005, now + noiseDuration);
+
+  noiseSource.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(masterGain);
+  noiseSource.start(now);
 }
 
 /* ------------------------------
@@ -145,6 +196,46 @@ function onPlayerReady(event) {
 }
 
 /* ------------------------------
+   YouTube URL 変換・ID抽出
+------------------------------ */
+function convertToEmbed(url) {
+  try {
+    const u = new URL(url);
+    let videoId = null;
+
+    if (u.hostname.includes('youtu.be')) {
+      videoId = u.pathname.slice(1).split('/')[0];
+    } else if (u.hostname.includes('youtube.com')) {
+      if (u.pathname.startsWith('/embed/')) {
+        videoId = u.pathname.split('/embed/')[1].split('/')[0];
+      } else if (u.pathname.startsWith('/shorts/')) {
+        videoId = u.pathname.split('/shorts/')[1].split('/')[0];
+      } else {
+        videoId = u.searchParams.get('v');
+      }
+    }
+
+    if (!videoId) return null;
+    videoId = videoId.split('?')[0].split('&')[0];
+    return `https://www.youtube.com/embed/${videoId}`;
+  } catch (e) {
+    return null;
+  }
+}
+
+function extractVideoIdFromEmbed(embedUrl) {
+  const m = embedUrl.match(/embed\/([^?&/]+)/);
+  return m ? m[1] : null;
+}
+
+function selectVideoById(id) {
+  if (!id || !player || typeof player.loadVideoById !== 'function') return;
+  selectedVideoId = id;
+  player.loadVideoById(id);
+  renderList();
+}
+
+/* ------------------------------
    YouTube リンク管理
 ------------------------------ */
 function saveLinks() {
@@ -156,7 +247,8 @@ function renderList() {
   ytLinks.forEach((embedUrl, index) => {
     const id = extractVideoIdFromEmbed(embedUrl);
     const div = document.createElement('div');
-    div.className = 'yt-item';
+    div.className = 'yt-item' + (id === selectedVideoId ? ' selected' : '');
+
     const playBtn = document.createElement('button');
     playBtn.textContent = '再生';
     playBtn.onclick = () => selectVideoById(id);
@@ -196,8 +288,73 @@ function addYoutube() {
 }
 
 function deleteLink(index) {
+  const removedId = extractVideoIdFromEmbed(ytLinks[index]);
   ytLinks.splice(index, 1);
   saveLinks();
+  if (selectedVideoId && selectedVideoId === removedId) {
+    selectedVideoId = null;
+  }
   renderList();
-  // 選択中の動画が削除されたら選択解除
-  if (selectedVideoId && !ytLinks.some(u => extractVideoIdFromEmbed(u) === selected
+}
+
+/* ------------------------------
+   タイマー
+------------------------------ */
+function updateDisplay(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = (sec % 60).toString().padStart(2, '0');
+  timeDisplay.textContent = `${m}:${s}`;
+}
+
+function startTimer() {
+  setupAudioContext(); // ユーザー操作の中で AudioContext を起動しておく
+
+  let minutes = parseInt(minutesInput.value, 10);
+  if (isNaN(minutes) || minutes <= 0) {
+    alert('1〜30の範囲で分数を入力してください');
+    return;
+  }
+  if (minutes > 30) {
+    minutes = 30;
+    minutesInput.value = 30;
+  }
+
+  stopTimer(); // 既存のタイマーがあれば止めてから開始
+
+  remainingSeconds = minutes * 60;
+  updateDisplay(remainingSeconds);
+
+  timerInterval = setInterval(() => {
+    remainingSeconds--;
+    updateDisplay(remainingSeconds);
+    if (remainingSeconds <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      playTempleBell();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+/* ------------------------------
+   初期化
+------------------------------ */
+addBtn.addEventListener('click', addYoutube);
+ytUrlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addYoutube();
+});
+startBtn.addEventListener('click', startTimer);
+stopBtn.addEventListener('click', stopTimer);
+
+renderList();
+updateDisplay(0);
+</script>
+
+</body>
+</html>
