@@ -112,18 +112,17 @@ function playTempleBell() {
   }
 
   const now = audioCtx.currentTime;
-  const fundamental = 240; // Hz
+  const fundamental = 90; // Hz。添付音源の解析で最後まで残っていた低いうなり成分
 
-  // オクターブ（2倍・4倍・8倍）を軸にして基音との調和を強め、濁りの原因になりやすい
-  // 近接した倍音（前回の1.5・3.4・4.2倍）を整理。2.76・5.4倍だけ残して鐘らしい煌めきを添える。
+  // 添付の音源をFFT/エンベロープ解析した実測値に基づく構成。
+  // 高い倍音(1095Hz)ほど打撃直後だけ明るく鳴ってすぐ減衰し、
+  // 低い成分(90Hz)ほど小さいが最後まで長く残る、という実際の減衰特性を再現。
   // [周波数比, 音量, 減衰にかかる秒数]
   const partials = [
-    { ratio: 1.00, gain: 1.00, decay: 6.0 },
-    { ratio: 2.00, gain: 0.45, decay: 5.2 },
-    { ratio: 2.76, gain: 0.20, decay: 4.0 },
-    { ratio: 4.00, gain: 0.15, decay: 3.0 },
-    { ratio: 5.40, gain: 0.08, decay: 2.0 },
-    { ratio: 8.00, gain: 0.04, decay: 1.2 },
+    { ratio: 1.00,  gain: 0.22, decay: 8.0 }, // 約90Hz  低く長く残るうなり
+    { ratio: 4.13,  gain: 0.20, decay: 6.1 }, // 約372Hz
+    { ratio: 7.83,  gain: 0.55, decay: 4.7 }, // 約705Hz 中核となる響き
+    { ratio: 12.17, gain: 1.00, decay: 1.6 }, // 約1095Hz 打撃直後に輝く高い倍音
   ];
 
   const masterGain = audioCtx.createGain();
