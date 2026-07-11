@@ -64,7 +64,7 @@
    設定と状態
 ------------------------------ */
 const MAX_LINKS = 10;
-const BELL_MASTER_GAIN = 1.2; // 鐘の合成音の全体音量
+const BELL_MASTER_GAIN = 1.8; // 鐘の合成音の全体音量（1.2 → 1.5倍）
 
 let player; // YT.Player
 let selectedVideoId = null;
@@ -112,18 +112,18 @@ function playTempleBell() {
   }
 
   const now = audioCtx.currentTime;
-  const fundamental = 90; // Hz。低めの基音で「ゴーン」という重さを出す
+  const fundamental = 260; // Hz
 
+  // オクターブ（2倍・4倍・8倍）を軸にして基音との調和を強め、濁りの原因になりやすい
+  // 近接した倍音（前回の1.5・3.4・4.2倍）を整理。2.76・5.4倍だけ残して鐘らしい煌めきを添える。
   // [周波数比, 音量, 減衰にかかる秒数]
   const partials = [
-    { ratio: 1.00, gain: 1.00, decay: 6.5 },
-    { ratio: 1.50, gain: 0.55, decay: 5.5 },
-    { ratio: 2.00, gain: 0.38, decay: 4.5 },
-    { ratio: 2.76, gain: 0.30, decay: 3.8 },
-    { ratio: 3.40, gain: 0.20, decay: 3.0 },
-    { ratio: 4.20, gain: 0.14, decay: 2.2 },
-    { ratio: 5.40, gain: 0.09, decay: 1.6 },
-    { ratio: 8.93, gain: 0.05, decay: 1.0 },
+    { ratio: 1.00, gain: 1.00, decay: 6.0 },
+    { ratio: 2.00, gain: 0.45, decay: 5.2 },
+    { ratio: 2.76, gain: 0.20, decay: 4.0 },
+    { ratio: 4.00, gain: 0.15, decay: 3.0 },
+    { ratio: 5.40, gain: 0.08, decay: 2.0 },
+    { ratio: 8.00, gain: 0.04, decay: 1.2 },
   ];
 
   const masterGain = audioCtx.createGain();
@@ -147,8 +147,9 @@ function playTempleBell() {
     osc.stop(now + p.decay + 0.2);
   });
 
-  // 打撃音（アタック）: 短いノイズバーストで「ゴンッ」という質感を追加
-  const noiseDuration = 0.06;
+  // 打撃音（アタック）: ごく短く高域寄りのノイズで「チン」という澄んだ立ち上がりを添える
+  // （前回よりゲインと長さを抑え、低域の濁りを避ける）
+  const noiseDuration = 0.03;
   const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * noiseDuration, audioCtx.sampleRate);
   const data = noiseBuffer.getChannelData(0);
   for (let i = 0; i < data.length; i++) {
@@ -158,11 +159,12 @@ function playTempleBell() {
   noiseSource.buffer = noiseBuffer;
 
   const noiseFilter = audioCtx.createBiquadFilter();
-  noiseFilter.type = 'lowpass';
-  noiseFilter.frequency.value = 900;
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = 4000;
+  noiseFilter.Q.value = 0.7;
 
   const noiseGain = audioCtx.createGain();
-  noiseGain.gain.setValueAtTime(0.5, now);
+  noiseGain.gain.setValueAtTime(0.2, now);
   noiseGain.gain.exponentialRampToValueAtTime(0.0005, now + noiseDuration);
 
   noiseSource.connect(noiseFilter);
