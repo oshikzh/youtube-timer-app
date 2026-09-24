@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YouTube + Timer App</title>
 
 <!-- PWA -->
@@ -9,21 +10,95 @@
 <meta name="theme-color" content="#ffffff">
 
 <style>
-  body { font-family: sans-serif; max-width: 700px; margin: 20px auto; padding: 0 10px; }
+  /* スマホ前提：指で押しやすいサイズ（目安として高さ56px以上） */
+  * { box-sizing: border-box; }
+  body {
+    font-family: sans-serif;
+    font-size: 18px;
+    max-width: 700px;
+    margin: 12px auto;
+    padding: 0 12px;
+    /* ダブルタップ拡大による誤動作を防ぎ、タップの反応を素直にする */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+  h2 { font-size: 1.3em; }
+  h3 { font-size: 1.1em; }
+
+  button {
+    min-height: 56px;
+    min-width: 88px;
+    padding: 12px 20px;
+    font-size: 1.05em;
+    border: 1px solid #888;
+    border-radius: 10px;
+    background: #f2f2f2;
+    cursor: pointer;
+  }
+  button:active { background: #ddd; }
+
+  input[type="text"], input[type="number"] {
+    min-height: 56px;
+    padding: 10px 12px;
+    font-size: 1em;
+    border: 1px solid #888;
+    border-radius: 10px;
+  }
+  input[type="file"] { font-size: 1em; }
+  /* ファイル選択ボタン部分も大きくする */
+  input[type="file"]::file-selector-button {
+    min-height: 56px;
+    padding: 12px 20px;
+    margin-right: 12px;
+    font-size: 1.05em;
+    border: 1px solid #888;
+    border-radius: 10px;
+    background: #f2f2f2;
+  }
+
+  /* YouTube 追加欄：入力欄は横いっぱい、追加ボタンはその下 */
+  .yt-add { display: flex; flex-direction: column; gap: 10px; }
+  #yt-url { width: 100%; }
+  #add-btn { width: 100%; }
+
+  /* 動画リスト：1件を「再生」ボタン大きく＋URL＋削除の並びに */
+  #yt-list { margin-top: 12px; }
+  .yt-item {
+    margin: 10px 0;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .yt-item.selected { background: #fff3e0; border-color: #f0b060; }
+  .yt-item span { flex: 1 1 100%; word-break: break-all; font-size: 0.85em; color: #444; order: 3; }
+  .yt-item .play-btn { flex: 1 1 0; order: 1; background: #e3f2e3; }
+  .yt-item .del-btn { order: 2; background: #fbe4e4; }
+
+  #ytplayer { width: 100%; aspect-ratio: 16 / 9; height: auto; background: #000; }
+  #ytplayer iframe { width: 100%; height: 100%; }
+
+  /* タイマー */
   .timer-box { margin-top: 20px; }
-  input { padding: 5px; }
-  button { padding: 8px 12px; margin-left: 5px; }
-  #time-display { font-size: 2em; margin-top: 10px; }
-  .yt-item { margin: 8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .yt-item button { margin-left: 0; }
-  .yt-item.selected { background:#fff3e0; border-radius:4px; padding:4px 6px; }
-  .yt-item span { word-break: break-all; }
-  #ytplayer { width:100%; max-width:560px; height:315px; background:#000; }
-  .small { font-size:0.9em; color:#555; }
+  .timer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  #minutes { width: 100px; text-align: center; }
+  .timer-buttons { display: flex; gap: 10px; margin-top: 12px; }
+  .timer-buttons button { flex: 1; min-height: 64px; }
+  #start-btn { background: #dcecff; }
+  #stop-btn { background: #fbe4e4; }
+  #time-display { font-size: 3em; margin-top: 12px; text-align: center; }
+
+  .small { font-size: 0.85em; color: #555; margin-top: 6px; }
+  hr { margin: 20px 0; }
+
+  /* 画像 */
   .image-box { margin-top: 24px; }
-  #image-preview { display:none; max-width:100%; margin-top:10px; border-radius:4px; }
-  #clear-image-btn { display:none; margin-left: 0; margin-top: 8px; }
-  #wake-status { margin-top: 6px; }
+  #image-preview { display: none; max-width: 100%; margin-top: 10px; border-radius: 6px; }
+  #clear-image-btn { display: none; margin-top: 10px; width: 100%; background: #fbe4e4; }
+  #wake-status { margin-top: 6px; text-align: center; }
 </style>
 </head>
 <body>
@@ -42,8 +117,10 @@
 <!-- YouTube リンク管理 -->
 <h3>YouTube リンク管理（最大10件）</h3>
 
-<input type="text" id="yt-url" placeholder="YouTube URL を入力" size="50">
-<button id="add-btn">追加</button>
+<div class="yt-add">
+  <input type="text" id="yt-url" placeholder="YouTube URL を入力">
+  <button id="add-btn">追加</button>
+</div>
 <div class="small">貼り付けると自動で埋め込み URL に変換します。「再生」ボタンで選択した動画がプレイヤーに読み込まれます。</div>
 
 <div id="yt-list"></div>
@@ -52,10 +129,14 @@
 
 <!-- タイマー -->
 <div class="timer-box">
-  <label>タイマー（分・最大30分）:</label>
-  <input type="number" id="minutes" min="1" max="30" value="30">
-  <button id="start-btn">開始</button>
-  <button id="stop-btn">停止</button>
+  <div class="timer-row">
+    <label for="minutes">タイマー（分・最大30分）:</label>
+    <input type="number" id="minutes" min="1" max="30" value="30" inputmode="numeric">
+  </div>
+  <div class="timer-buttons">
+    <button id="start-btn">開始</button>
+    <button id="stop-btn">停止</button>
+  </div>
 
   <div id="time-display">00:00</div>
   <div id="wake-status" class="small"></div>
@@ -261,8 +342,8 @@ function playTempleBell() {
 function onYouTubeIframeAPIReady() {
   // 初期は空のプレイヤーを作る（videoId は指定しない）
   player = new YT.Player('ytplayer', {
-    height: '315',
-    width: '560',
+    height: '100%',
+    width: '100%',
     videoId: '',
     playerVars: {
       'playsinline': 1,
@@ -343,7 +424,8 @@ function renderList() {
     div.className = 'yt-item' + (id === selectedVideoId ? ' selected' : '');
 
     const playBtn = document.createElement('button');
-    playBtn.textContent = '再生';
+    playBtn.textContent = '▶ 再生';
+    playBtn.className = 'play-btn';
     playBtn.onclick = () => selectVideoById(id);
 
     const urlSpan = document.createElement('span');
@@ -351,6 +433,7 @@ function renderList() {
 
     const delBtn = document.createElement('button');
     delBtn.textContent = '削除';
+    delBtn.className = 'del-btn';
     delBtn.onclick = () => {
       deleteLink(index);
     };

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'app-cache-v4'; // バージョンを上げるときはここを更新
+const CACHE_NAME = 'app-cache-v5'; // バージョンを上げるときはここを更新
 const PRECACHE_URLS = [
   './',
   './index.html',
