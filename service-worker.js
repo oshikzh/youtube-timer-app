@@ -1,8 +1,8 @@
-const CACHE_NAME = 'app-cache-v3'; // バージョンを上げるときはここを更新
+const CACHE_NAME = 'app-cache-v4'; // バージョンを上げるときはここを更新
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  './',
+  './index.html',
+  './manifest.json'
 ];
 
 // インストール時にプリキャッシュ
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
       fetch(req).then((resp) => {
         return resp;
       }).catch(() => {
-        return caches.match('/index.html');
+        return caches.match('./index.html');
       })
     );
     return;

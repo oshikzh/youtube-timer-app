@@ -20,6 +20,10 @@
   .yt-item span { word-break: break-all; }
   #ytplayer { width:100%; max-width:560px; height:315px; background:#000; }
   .small { font-size:0.9em; color:#555; }
+  .image-box { margin-top: 24px; }
+  #image-preview { display:none; max-width:100%; margin-top:10px; border-radius:4px; }
+  #clear-image-btn { display:none; margin-left: 0; margin-top: 8px; }
+  #wake-status { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -54,6 +58,19 @@
   <button id="stop-btn">停止</button>
 
   <div id="time-display">00:00</div>
+  <div id="wake-status" class="small"></div>
+</div>
+
+<hr>
+
+<!-- 画像アップロード -->
+<div class="image-box">
+  <h3>画像</h3>
+  <input type="file" id="image-input" accept="image/*">
+  <div>
+    <button id="clear-image-btn">画像を消す</button>
+  </div>
+  <img id="image-preview" alt="アップロードした画像">
 </div>
 
 <!-- YouTube IFrame API -->
@@ -83,6 +100,72 @@ const ytUrlInput = document.getElementById('yt-url');
 const ytListDiv = document.getElementById('yt-list');
 const timeDisplay = document.getElementById('time-display');
 const minutesInput = document.getElementById('minutes');
+const imageInput = document.getElementById('image-input');
+const imagePreview = document.getElementById('image-preview');
+const clearImageBtn = document.getElementById('clear-image-btn');
+const wakeStatus = document.getElementById('wake-status');
+
+/* ------------------------------
+   画面消灯の防止（Screen Wake Lock API）
+   YouTube再生中、またはタイマー動作中は画面を点灯したままにする。
+   Wake Lock はタブが非表示になると自動的に解除されるため、
+   復帰時（visibilitychange）に必要なら取り直す。
+------------------------------ */
+let wakeLock = null;
+let ytPlaying = false;
+
+function shouldKeepAwake() {
+  return ytPlaying || timerInterval !== null;
+}
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    wakeStatus.textContent = 'この端末/ブラウザは画面常時点灯（Wake Lock）に対応していません';
+    return;
+  }
+  if (wakeLock) return; // 取得済み
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+      updateWakeStatus();
+    });
+    updateWakeStatus();
+  } catch (err) {
+    // 省電力モード、バッテリー残量低下、権限なし等で失敗することがある
+    wakeLock = null;
+    wakeStatus.textContent = '画面常時点灯を有効にできませんでした: ' + err.name;
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+  updateWakeStatus();
+}
+
+function updateWakeStatus() {
+  if (!('wakeLock' in navigator)) return;
+  wakeStatus.textContent = wakeLock ? '🔆 画面を点灯したままにしています' : '';
+}
+
+// 再生・タイマーの状態に応じて取得/解放を切り替える
+function syncWakeLock() {
+  if (shouldKeepAwake()) {
+    requestWakeLock();
+  } else {
+    releaseWakeLock();
+  }
+}
+
+// タブに戻ってきたとき、必要なら取り直す
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && shouldKeepAwake()) {
+    requestWakeLock();
+  }
+});
 
 /* ------------------------------
    Web Audio API（梵鐘の合成音）
@@ -187,13 +270,22 @@ function onYouTubeIframeAPIReady() {
       'rel': 0
     },
     events: {
-      'onReady': onPlayerReady
+      'onReady': onPlayerReady,
+      'onStateChange': onPlayerStateChange
     }
   });
 }
 
 function onPlayerReady(event) {
   // プレイヤー準備完了
+}
+
+function onPlayerStateChange(event) {
+  // 再生中(PLAYING)とバッファリング中(BUFFERING)は点灯維持。
+  // 一時停止・終了・未開始などでは解放する。
+  ytPlaying = (event.data === YT.PlayerState.PLAYING ||
+               event.data === YT.PlayerState.BUFFERING);
+  syncWakeLock();
 }
 
 /* ------------------------------
@@ -320,7 +412,11 @@ function startTimer() {
     minutesInput.value = 30;
   }
 
-  stopTimer(); // 既存のタイマーがあれば止めてから開始
+  // 既存のタイマーがあれば止めてから開始（Wake Lockは維持したいので同期はしない）
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
 
   remainingSeconds = minutes * 60;
   updateDisplay(remainingSeconds);
@@ -332,8 +428,10 @@ function startTimer() {
       clearInterval(timerInterval);
       timerInterval = null;
       playTempleBell();
+      syncWakeLock();
     }
   }, 1000);
+  syncWakeLock();
 }
 
 function stopTimer() {
@@ -341,6 +439,45 @@ function stopTimer() {
     clearInterval(timerInterval);
     timerInterval = null;
   }
+  syncWakeLock();
+}
+
+/* ------------------------------
+   画像アップロード（表示のみ・保存はしない）
+------------------------------ */
+let currentImageUrl = null;
+
+function showImage(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  // 前の画像のURLを解放してメモリリークを防ぐ
+  if (currentImageUrl) URL.revokeObjectURL(currentImageUrl);
+  currentImageUrl = URL.createObjectURL(file);
+  imagePreview.src = currentImageUrl;
+  imagePreview.style.display = 'block';
+  clearImageBtn.style.display = 'inline-block';
+}
+
+function clearImage() {
+  if (currentImageUrl) URL.revokeObjectURL(currentImageUrl);
+  currentImageUrl = null;
+  imagePreview.removeAttribute('src');
+  imagePreview.style.display = 'none';
+  clearImageBtn.style.display = 'none';
+  imageInput.value = ''; // 同じファイルを再選択できるようにする
+}
+
+imageInput.addEventListener('change', () => {
+  showImage(imageInput.files[0]);
+});
+clearImageBtn.addEventListener('click', clearImage);
+
+/* ------------------------------
+   Service Worker 登録（PWA）
+------------------------------ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
 }
 
 /* ------------------------------
